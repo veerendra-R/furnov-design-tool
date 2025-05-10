@@ -99,27 +99,49 @@ export default function CanvasArea3D({ walls }) {
     const zOffset = -25;
 
 
-    walls.forEach(({ start, end }) => {
+    walls.forEach(({ start, end, type = 'wall' }) => {
       const dx = (end.x - start.x) / 20;
       const dz = (end.y - start.y) / 20;
       const length = Math.sqrt(dx * dx + dz * dz);
       const angle = Math.atan2(dz, dx);
-
+    
+      // Wall type-specific height and material
+      let height = 2.5;
+      let material;
+    
+      if (type === 'door') {
+        height = 1.2;
+        material = new THREE.MeshStandardMaterial({ color: 0x8b4513 }); // brown
+      } else if (type === 'window') {
+        height = 1.2;
+        material = new THREE.MeshStandardMaterial({
+          color: 0x87ceeb,
+          transparent: true,
+          opacity: 0.5
+        });
+      } else {
+        material = new THREE.MeshStandardMaterial({
+          color: 0x666666,
+          transparent: true,
+          opacity: 0.7
+        });
+      }
+    
       const wall = new THREE.Mesh(
-        new THREE.BoxGeometry(length, wallHeight, 0.1),
-        wallMaterial
+        new THREE.BoxGeometry(length, height, 0.1),
+        material
       );
-
+    
       wall.position.set(
         ((start.x + end.x) / 2 - centerX) / 20,
-        wallHeight / 2,
+        height / 2,
         -((start.y + end.y) / 2 - centerY) / 20
       );
-      
-
+    
       wall.rotation.y = -angle;
       scene.add(wall);
     });
+    
 
     const animate = () => {
       requestAnimationFrame(animate);
