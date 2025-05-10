@@ -1,0 +1,18 @@
+.editorLayout {
+    display: flex;
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+    flex-direction: row;
+  
+    @media (max-width: 768px) {
+      flex-direction: column;
+    }
+  }
+  
+  .canvasArea {
+    flex: 1;
+    position: relative;
+    background-color: #eaeaea;
+  }
+  

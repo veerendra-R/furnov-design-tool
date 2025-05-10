@@ -1,0 +1,51 @@
+@import '../lib/styles/variables';
+
+.uploadContainer {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+
+  h2 {
+    font-size: $font-size-lg;
+    margin-bottom: 1rem;
+  }
+
+  input[type='file'] {
+    margin-top: 1rem;
+    font-size: $font-size-base;
+  }
+
+  .fileInfo {
+    margin-top: 1.5rem;
+    font-size: $font-size-base;
+    color: $primary;
+  }
+
+  button {
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    font-size: $font-size-base;
+    background-color: $accent;
+    color: white;
+    border: none;
+    border-radius: $radius;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+
+    &:hover {
+      background-color: darken($accent, 10%);
+    }
+  }
+
+  @media (min-width: 600px) {
+    h2 {
+      font-size: $font-size-xl;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    padding: 4rem;
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "2BHK Grid Plan",
+  "wallHeight": 2.5,
+  "roomUnitSize": 1, 
+  "rooms": [
+    {
+      "name": "Living Room",
+      "width": 4,
+      "depth": 4,
+      "position": [0, 0]
+    },
+    {
+      "name": "Bedroom 1",
+      "width": 3.5,
+      "depth": 3.5,
+      "position": [4, 0]
+    },
+    {
+      "name": "Bedroom 2",
+      "width": 3,
+      "depth": 3,
+      "position": [0, -4]
+    },
+    {
+      "name": "Kitchen",
+      "width": 2.5,
+      "depth": 3,
+      "position": [4, -4]
+    },
+    {
+      "name": "Bathroom",
+      "width": 2,
+      "depth": 2,
+      "position": [2, -7]
+    }
+  ]
+}
