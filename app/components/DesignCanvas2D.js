@@ -7,7 +7,9 @@ const gridSize = 20;
 
 export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   const [walls, setWalls] = useState(initialWalls);
-
+  const [roomLabels, setRoomLabels] = useState([]);
+  const [selectedLabelIndex, setSelectedLabelIndex] = useState(null);
+  
   const [drawing, setDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState(null);
   const [currentPoint, setCurrentPoint] = useState(null);
@@ -22,7 +24,18 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
     const ctx = canvas.getContext('2d');
   
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-  
+    // Draw room labels
+    roomLabels.forEach(({ x, y, name }, i) => {
+      ctx.fillStyle = i === selectedLabelIndex ? '#d62828' : '#000';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, 2 * Math.PI);
+      ctx.fill(); // point marker
+      ctx.fillText(name, x + 8, y - 8); // better offset: avoids overlapping measurement
+    });
+    
+    
+
     // Draw grid
     ctx.strokeStyle = '#e0e0e0';
     ctx.lineWidth = 1;
@@ -115,12 +128,14 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   }, [walls, startPoint, currentPoint]);
 
   const handleMouseDown = (e) => {
+    if (!['wall', 'door', 'window'].includes(tool)) return; // ⛔ block drawing for select-label/label
     setDrawing(true);
     const rect = canvasRef.current.getBoundingClientRect();
     const x = snap(e.clientX - rect.left);
     const y = snap(e.clientY - rect.top);
     setStartPoint({ x, y });
   };
+  
 
   const handleMouseMove = (e) => {
     if (!drawing) return;
@@ -143,6 +158,7 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
 
   const handleMouseUp = (e) => {
     if (!drawing || !startPoint || !currentPoint) return;
+    if (!['wall', 'door', 'window'].includes(tool)) return; // ✅ add this check  
     const newWall = {
       start: startPoint,
       end: currentPoint,
@@ -189,27 +205,48 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   };
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Delete' && selectedWallIndex !== null) {
-        const updatedWalls = walls.filter((_, i) => i !== selectedWallIndex);
-        setWalls(updatedWalls);
-        setSelectedWallIndex(null);
-        if (onWallsUpdate) onWallsUpdate(updatedWalls);
-      }
+      if (e.key === 'Delete') {
+        if (selectedWallIndex !== null) {
+          const updatedWalls = walls.filter((_, i) => i !== selectedWallIndex);
+          setWalls(updatedWalls);
+          setSelectedWallIndex(null);
+          localStorage.setItem('floorplan-walls', JSON.stringify(updatedWalls));
+          if (onWallsUpdate) onWallsUpdate(updatedWalls);
+        }
+      
+        if (selectedLabelIndex !== null) {
+          const updatedLabels = roomLabels.filter((_, i) => i !== selectedLabelIndex);
+          setRoomLabels(updatedLabels);
+          setSelectedLabelIndex(null);
+          localStorage.setItem('floorplan-labels', JSON.stringify(updatedLabels));
+        }
+      }      
+    
     };
   
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [walls, selectedWallIndex]);
+  }, [walls, selectedWallIndex, roomLabels, selectedLabelIndex]);
+  useEffect(() => {
+    draw();
+  }, [walls, startPoint, currentPoint, roomLabels, selectedLabelIndex]);
+  
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('floorplan-walls');
-      if (stored) {
-        const parsed = JSON.parse(stored);
+      const storedWalls = localStorage.getItem('floorplan-walls');
+      if (storedWalls) {
+        const parsed = JSON.parse(storedWalls);
         setWalls(parsed);
         if (onWallsUpdate) onWallsUpdate(parsed);
       }
+  
+      const storedLabels = localStorage.getItem('floorplan-labels');
+      if (storedLabels) {
+        setRoomLabels(JSON.parse(storedLabels));
+      }
     }
   }, []);
+  
   
 
   return (
@@ -221,25 +258,93 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
         <button onClick={() => setTool('window')}>Window</button>
         <button onClick={handleUndo}>Undo</button>
         <button onClick={handleClear}>Clear</button>
+        <button onClick={() => setTool('label')}>Label</button>
+        <button onClick={() => setTool('select-label')}>Select Label</button>
         <button onClick={() => {
           localStorage.removeItem('floorplan-walls');
+          localStorage.removeItem('floorplan-labels');
           setWalls([]);
+          setRoomLabels([]);
+          setSelectedWallIndex(null);
+          setSelectedLabelIndex(null);
           if (onWallsUpdate) onWallsUpdate([]);
         }}>Reset Plan</button>
+
 
       </div>
       <canvas
         ref={canvasRef}
+        style={{ cursor: tool === 'select-label' ? 'pointer' : drawing ? 'crosshair' : 'default' }}
         className={styles.canvas}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onClick={(e) => {
           const rect = canvasRef.current.getBoundingClientRect();
+          const x = snap(e.clientX - rect.left);
+          const y = snap(e.clientY - rect.top);
+        
+          setDrawing(false);
+          setStartPoint(null);
+          setCurrentPoint(null);
+          setSelectedWallIndex(null);
+        
+          if (tool === 'label') {
+            const name = prompt('Enter room name:');
+            if (name) {
+              const newLabels = [...roomLabels, { x, y, name }];
+              setRoomLabels(newLabels);
+              localStorage.setItem('floorplan-labels', JSON.stringify(newLabels));
+            }
+          }
+        
+          if (tool === 'select-label') {
+            const tolerance = 12;
+            let found = false;
+        
+            for (let i = 0; i < roomLabels.length; i++) {
+              const label = roomLabels[i];
+              const dist = Math.sqrt((x - label.x) ** 2 + (y - label.y) ** 2);
+              if (dist < tolerance) {
+                setSelectedLabelIndex(i);
+                found = true;
+                break;
+              }
+            }
+        
+            if (!found) setSelectedLabelIndex(null);
+          }
+        }}
+        
+        
+        onDoubleClick={(e) => {
+          if (tool !== 'select-label') return;
+        
+          const rect = canvasRef.current.getBoundingClientRect();
           const x = e.clientX - rect.left;
           const y = e.clientY - rect.top;
-          handleWallClick(x, y);
+          const tolerance = 12;
+        
+          for (let i = 0; i < roomLabels.length; i++) {
+            const label = roomLabels[i];
+            const dist = Math.sqrt((x - label.x) ** 2 + (y - label.y) ** 2);
+            if (dist < tolerance) {
+              const newName = prompt('Rename label:', label.name);
+              if (newName) {
+                const updated = [...roomLabels];
+                updated[i].name = newName;
+                setRoomLabels(updated);
+                localStorage.setItem('floorplan-labels', JSON.stringify(updated));
+                setSelectedLabelIndex(i);
+              }
+              break;
+            }
+          }
         }}
+        
+        
+        
+        
       />
     </div>
   );
