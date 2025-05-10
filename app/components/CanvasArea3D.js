@@ -17,11 +17,9 @@ export default function CanvasArea3D({ walls }) {
     scene.background = new THREE.Color(0xe6e6e6);
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-    camera.position.set(5, 10, 10); // angled top-down at an offset
-    camera.lookAt(0, 0, 0);
 
-    const grid = new THREE.GridHelper(100, 100, 0xcccccc, 0xeeeeee);
-    scene.add(grid);
+    
+    
     
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
@@ -48,6 +46,31 @@ export default function CanvasArea3D({ walls }) {
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
 
+    const contentWidth = (maxX - minX) / 20;
+    const contentDepth = (maxY - minY) / 20;
+    const maxDimension = Math.max(contentWidth, contentDepth);
+    
+
+    const floorPadding = 4; // Extra space around the content
+    const floorWidth = contentWidth + floorPadding;
+    const floorDepth = contentDepth + floorPadding;
+
+    const grid = new THREE.GridHelper(
+      Math.max(floorWidth, floorDepth),
+      Math.max(floorWidth, floorDepth)
+    );
+    grid.position.y = 0.01; // slightly above the floor
+    scene.add(grid);
+    
+    const cameraDistance = maxDimension + 10;
+
+    camera.position.set(cameraDistance, cameraDistance, cameraDistance);
+    camera.lookAt(0, 0, 0);
+    
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+
 
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
@@ -64,12 +87,12 @@ export default function CanvasArea3D({ walls }) {
 
     // Ground Plane
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(200, 200),
+      new THREE.PlaneGeometry(floorWidth, floorDepth),
       new THREE.MeshStandardMaterial({ color: 0xf0f0f0 })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
-    scene.add(ground);
+    scene.add(ground);    
 
     // Recentering wall positions (instead of using screen size)
     const xOffset = -25; // shift X and Z to center around origin
