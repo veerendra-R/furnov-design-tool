@@ -7,27 +7,17 @@
   flex-direction: column;
 }
 
-.canvas {
-  flex-grow: 1;
-  display: block;
-  width: 100%;
-  height: 100%;
-  touch-action: none;
-  background: #fefefe;
-}
-
 .toolbar {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: #ffffffcc;
+  position: sticky;
+  top: 0;
+  background: #ffffffee;
   padding: 8px;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  z-index: 10;
+  z-index: 100;
   display: flex;
-  gap: 6px;
   flex-wrap: wrap;
+  gap: 6px;
+  border-bottom: 1px solid #ccc;
+  justify-content: flex-start;
 
   button {
     padding: 6px 12px;
@@ -45,6 +35,14 @@
   }
 }
 
+.canvas {
+  flex-grow: 1;
+  width: 100%;
+  height: 100%;
+  background: #fefefe;
+  touch-action: none;
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -52,12 +50,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 200;
 }
 
 .modalContent {
   background: white;
-  padding: 20px 30px;
+  padding: 20px;
   border-radius: 10px;
   width: 90%;
   max-width: 400px;
@@ -71,25 +69,24 @@
     display: flex;
     justify-content: center;
     gap: 12px;
-    margin-bottom: 20px;
     flex-wrap: wrap;
+    margin-bottom: 20px;
   }
 
   .shapeButton {
     display: flex;
     flex-direction: column;
     align-items: center;
-    cursor: pointer;
     border: 1px solid #ccc;
     border-radius: 6px;
     padding: 8px;
-    transition: all 0.2s ease;
+    cursor: pointer;
     background: #f9f9f9;
+    transition: all 0.2s ease;
 
     img {
       width: 60px;
       height: 60px;
-      object-fit: contain;
     }
 
     span {
@@ -111,7 +108,6 @@
     color: white;
     border: none;
     border-radius: 6px;
-    cursor: pointer;
 
     &:hover {
       background: #b22;

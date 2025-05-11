@@ -33,11 +33,15 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   };
   const getCanvasCenter = () => {
     const canvas = canvasRef.current;
-    const centerX = (canvas.width / 2) / zoom - offset.x;
-    const centerY = (canvas.height / 2) / zoom - offset.y;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const centerX = (rect.width / 2) / zoom - offset.x;
+    const centerY = (rect.height / 2) / zoom - offset.y;
     return { x: snap(centerX), y: snap(centerY, false) };
   };
-  
+   
+  const { x, y } = getCanvasCenter();
+
   const addPredefinedRoom = (shape) => {
     const { x, y } = getCanvasCenter();
     let newWalls = [];
@@ -219,12 +223,13 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
     if (startPoint) {
       const dx = Math.abs(x - startPoint.x);
       const dy = Math.abs(y - startPoint.y);
-  
       if (dx > dy) {
-        setCurrentPoint({ x, y: startPoint.y }); // snap to horizontal
+        setCurrentPoint({ x, y: startPoint.y });
       } else {
-        setCurrentPoint({ x: startPoint.x, y }); // snap to vertical
-      }
+        setCurrentPoint({ x: startPoint.x, y });
+      } 
+      setCurrentPoint({ x, y });  // allow free line drawing
+    
     }
   };
   
@@ -412,7 +417,8 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
       const dy = Math.abs(y - startPoint.y);
       setCurrentPoint({ x, y });
     }
-    e.preventDefault();
+    // e.preventDefault();
+    
   };
 
   const handleTouchEnd = () => {
@@ -430,19 +436,39 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
     setStartPoint(null);
     setCurrentPoint(null);
   };
-  
+  const areWallsEqual = (a, b) =>
+    a.start.x === b.start.x &&
+    a.start.y === b.start.y &&
+    a.end.x === b.end.x &&
+    a.end.y === b.end.y &&
+    a.type === b.type;
+  const preservedWalls = walls.filter(w => !shapes.flat().some(sw =>
+    sw.start.x === w.start.x &&
+    sw.start.y === w.start.y &&
+    sw.end.x === w.end.x &&
+    sw.end.y === w.end.y
+  ));
+    
+    
   useEffect(() => {
     const canvas = canvasRef.current;
   
     const disableScroll = (e) => e.preventDefault();
   
-    canvas.addEventListener('touchstart', disableScroll, { passive: false });
-    canvas.addEventListener('touchmove', disableScroll, { passive: false });
-  
+    canvas.removeEventListener('touchstart', disableScroll, { passive: false });
+    canvas.removeEventListener('touchmove', disableScroll, { passive: false });
+    canvas.removeEventListener('gesturestart', disableScroll, { passive: false });
+    canvas.removeEventListener('gesturechange', disableScroll, { passive: false });
+    canvas.removeEventListener('wheel', disableScroll, { passive: false });
+    
+
+    
     return () => {
       canvas.removeEventListener('touchstart', disableScroll);
       canvas.removeEventListener('touchmove', disableScroll);
+      canvas.removeEventListener('wheel', disableScroll);
     };
+    
   }, []);
   
   return (
@@ -488,7 +514,12 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
       )}
       <canvas
         ref={canvasRef}
-        style={{ cursor: tool === 'select-label' ? 'pointer' : drawing ? 'crosshair' : 'default' }}
+        style={{
+          cursor: tool === 'select-label' ? 'pointer' : drawing ? 'crosshair' : 'default',
+          width: '100%',
+          height: '100%',
+          display: 'block'
+        }}
         className={styles.canvas}
         onMouseDown={(e) => {
           if (e.button === 1 || (e.button === 0 && e.altKey)) {
@@ -519,9 +550,6 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
             handleMouseMove(e);
           }
           if (tool === 'select-shape' && selectedShapeIndex !== null && panStartRef.current) {
-            const rect = canvasRef.current.getBoundingClientRect();
-            const x = snap(e.clientX - rect.left);
-            const y = snap(e.clientY - rect.top);
             const dx = x - panStartRef.current.x;
             const dy = y - panStartRef.current.y;
             const updatedShapes = [...shapes];
@@ -532,11 +560,21 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
             }));
             updatedShapes[selectedShapeIndex] = shape;
             setShapes(updatedShapes);
-            const preservedWalls = walls.filter(w => !shapes.flat().some(sw => sw.start.x === w.start.x && sw.start.y === w.start.y && sw.end.x === w.end.x && sw.end.y === w.end.y));
-            setWalls([...preservedWalls, ...updatedShapes.flat()]);            
-            panStartRef.current = { x, y };
+            const preservedWalls = walls.filter(w => !shapes.flat().some(sw =>
+              sw.start.x === w.start.x &&
+              sw.start.y === w.start.y &&
+              sw.end.x === w.end.x &&
+              sw.end.y === w.end.y
+            ));
+            setWalls([...preservedWalls, ...updatedShapes.flat()]);
+            if (tool === 'select-shape') {
+              panStartRef.current = { x, y };
+              return;
+            }
+            
             return;
           }
+          
           
         }}
         
@@ -544,19 +582,20 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
           setIsPanning(false);
           handleMouseUp(e);
           if (tool === 'select-shape' && selectedShapeIndex !== null) {
-            // Persist shape drag on mouse up
             const preservedWalls = walls.filter(w => !shapes.flat().some(sw => sw.start.x === w.start.x && sw.start.y === w.start.y && sw.end.x === w.end.x && sw.end.y === w.end.y));
             const updated = [...preservedWalls, ...shapes.flat()];
-            setWalls(updated);            
+            setWalls(updated);
             localStorage.setItem('floorplan-shapes', JSON.stringify(shapes));
             localStorage.setItem('floorplan-walls', JSON.stringify(updated));
             if (onWallsUpdate) onWallsUpdate(updated);
-            setSelectedShapeIndex(null);
+            setTimeout(() => setSelectedShapeIndex(null), 100);
+
           }
+          
         }}
         
         onWheel={(e) => {
-          e.preventDefault();
+          // e.preventDefault();
           const factor = e.deltaY < 0 ? 1.1 : 0.9;
           setZoom((prev) => Math.max(0.5, Math.min(4, prev * factor)));
         }}
@@ -641,9 +680,86 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
           }
         }}
         
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onTouchStart={(e) => {
+          const touch = e.touches[0];
+          const rect = canvasRef.current.getBoundingClientRect();
+          const x = snap(touch.clientX - rect.left);
+          const y = snap(touch.clientY - rect.top);
+        
+          if (tool === 'select-shape') {
+            handleShapeClick(x, y);
+            panStartRef.current = { x, y };
+            return;
+          }
+          if (tool === 'select-label') {
+            handleWallClick(x, y);
+          }          
+          if (!['wall', 'door', 'window'].includes(tool)) return;
+          setStartPoint({ x, y });
+          setDrawing(true);
+        }}
+        
+        onTouchMove={(e) => {
+          const touch = e.touches[0];
+          const rect = canvasRef.current.getBoundingClientRect();
+          const x = snap(touch.clientX - rect.left);
+          const y = snap(touch.clientY - rect.top);
+        
+          if (tool === 'select-shape' && selectedShapeIndex !== null) {
+            const dx = x - panStartRef.current.x;
+            const dy = y - panStartRef.current.y;
+        
+            const updatedShapes = [...shapes];
+            const shape = updatedShapes[selectedShapeIndex].map(w => ({
+              start: { x: w.start.x + dx, y: w.start.y + dy },
+              end: { x: w.end.x + dx, y: w.end.y + dy },
+              type: w.type
+            }));
+            updatedShapes[selectedShapeIndex] = shape;
+        
+            const preservedWalls = walls.filter(w => !shapes.flat().some(sw =>
+              sw.start.x === w.start.x &&
+              sw.start.y === w.start.y &&
+              sw.end.x === w.end.x &&
+              sw.end.y === w.end.y
+            ));
+            setWalls([...preservedWalls, ...updatedShapes.flat()]);
+            setShapes(updatedShapes);
+            panStartRef.current = { x, y };
+            return;
+          }
+        
+          handleTouchMove(e); // fallback to normal touch drawing
+        }}
+        
+        onTouchEnd={() => {
+          if (tool === 'select-shape' && selectedShapeIndex !== null) {
+            const preservedWalls = walls.filter(w => !shapes.flat().some(sw =>
+              sw.start.x === w.start.x &&
+              sw.start.y === w.start.y &&
+              sw.end.x === w.end.x &&
+              sw.end.y === w.end.y
+            ));
+            const updated = [...preservedWalls, ...shapes.flat()];
+            setWalls(updated);
+            localStorage.setItem('floorplan-shapes', JSON.stringify(shapes));
+            localStorage.setItem('floorplan-walls', JSON.stringify(updated));
+            if (onWallsUpdate) onWallsUpdate(updated);
+            setSelectedShapeIndex(null);
+            return;
+          }
+          if ((tool === 'select-label' || tool === 'wall') && selectedWallIndex !== null) {
+            const updatedWalls = walls.filter((_, i) => i !== selectedWallIndex);
+            setWalls(updatedWalls);
+            localStorage.setItem('floorplan-walls', JSON.stringify(updatedWalls));
+            if (onWallsUpdate) onWallsUpdate(updatedWalls);
+            setSelectedWallIndex(null);
+          }
+          
+          handleTouchEnd(); // fallback to wall drawing
+        }}
+        
+        
   
         
         
