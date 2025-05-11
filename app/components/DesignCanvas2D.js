@@ -217,6 +217,9 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   
     setSelectedWallIndex(null);
   };
+
+
+  
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Delete') {
@@ -277,7 +280,65 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
     return () => window.removeEventListener('resize', resizeCanvas);
   }, [draw]);
   
+  const handleTouchStart = (e) => {
+    if (!['wall', 'door', 'window'].includes(tool)) return;
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = snap(touch.clientX - rect.left, true);
+    const y = snap(touch.clientY - rect.top, false);
+    setStartPoint({ x, y });
+    setDrawing(true);
+  };
 
+  const handleTouchMove = (e) => {
+    if (!drawing) return;
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = snap(touch.clientX - rect.left, true);
+    const y = snap(touch.clientY - rect.top, false);
+
+    if (startPoint) {
+      const dx = Math.abs(x - startPoint.x);
+      const dy = Math.abs(y - startPoint.y);
+      if (dx > dy) {
+        setCurrentPoint({ x, y: startPoint.y });
+      } else {
+        setCurrentPoint({ x: startPoint.x, y });
+      }
+    }
+    e.preventDefault();
+  };
+
+  const handleTouchEnd = () => {
+    if (!drawing || !startPoint || !currentPoint) return;
+    const newWall = {
+      start: startPoint,
+      end: currentPoint,
+      type: tool
+    };
+    const updatedWalls = [...walls, newWall];
+    setWalls(updatedWalls);
+    localStorage.setItem('floorplan-walls', JSON.stringify(updatedWalls));
+    if (onWallsUpdate) onWallsUpdate(updatedWalls);
+    setDrawing(false);
+    setStartPoint(null);
+    setCurrentPoint(null);
+  };
+  
+  useEffect(() => {
+    const canvas = canvasRef.current;
+  
+    const disableScroll = (e) => e.preventDefault();
+  
+    canvas.addEventListener('touchstart', disableScroll, { passive: false });
+    canvas.addEventListener('touchmove', disableScroll, { passive: false });
+  
+    return () => {
+      canvas.removeEventListener('touchstart', disableScroll);
+      canvas.removeEventListener('touchmove', disableScroll);
+    };
+  }, []);
+  
   return (
     <div className={styles.wrapper}>
       <div className={styles.toolbar}>
@@ -400,7 +461,10 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
           }
         }}
         
-        
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+  
         
         
       />
