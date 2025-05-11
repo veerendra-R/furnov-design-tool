@@ -19,7 +19,9 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [showRoomModal, setShowRoomModal] = useState(false);
-
+  const [shapes, setShapes] = useState([]); // line 18
+  const [selectedShapeIndex, setSelectedShapeIndex] = useState(null); // line 19
+  const [shapeDragOffset, setShapeDragOffset] = useState({ x: 0, y: 0 });
 
   
   const panStartRef = useRef(null);
@@ -65,11 +67,17 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
       ];
     }
 
-    const updated = [...walls, ...newWalls];
+    const shapeWalls = [...newWalls];
+    const updatedShapes = [...shapes, shapeWalls];
+    setShapes(updatedShapes);
+    
+    const updated = [...walls, ...shapeWalls];
     setWalls(updated);
     localStorage.setItem('floorplan-walls', JSON.stringify(updated));
+    localStorage.setItem('floorplan-shapes', JSON.stringify(updatedShapes));
     if (onWallsUpdate) onWallsUpdate(updated);
     setShowRoomModal(false);
+    
   };
 
   const renderShapeButton = (src, label, shape) => (
@@ -242,14 +250,43 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   const handleUndo = () => {
     const updated = walls.slice(0, -1);
     setWalls(updated);
-    localStorage.setItem('floorplan-walls', JSON.stringify(updated))
+  
+    // Update shapes state accordingly
+    const flatShapes = shapes.flat();
+    const shapeCount = flatShapes.length;
+    const wallCount = updated.length;
+  
+    if (shapeCount > 0 && wallCount < shapeCount) {
+      const newFlatShapes = flatShapes.slice(0, wallCount);
+      const rebuiltShapes = [];
+  
+      let index = 0;
+      for (const group of shapes) {
+        const next = newFlatShapes.slice(index, index + group.length);
+        if (next.length > 0) rebuiltShapes.push(next);
+        index += group.length;
+      }
+  
+      setShapes(rebuiltShapes);
+      localStorage.setItem('floorplan-shapes', JSON.stringify(rebuiltShapes));
+    }
+  
+    localStorage.setItem('floorplan-walls', JSON.stringify(updated));
     if (onWallsUpdate) onWallsUpdate(updated);
   };
   
+  
   const handleClear = () => {
     setWalls([]);
+    setShapes([]); // ← Add this
+    localStorage.removeItem('floorplan-walls'); // optional but safer
+    localStorage.removeItem('floorplan-shapes'); // ← Add this
+    localStorage.removeItem('floorplan-shapes'); 
+    setShapes([]); // ✅ Clear runtime shape state
+
     if (onWallsUpdate) onWallsUpdate([]);
   };
+  
   
   const handleWallClick = (x, y) => {
     const tolerance = 10;
@@ -268,6 +305,24 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   
     setSelectedWallIndex(null);
   };
+
+  const handleShapeClick = (x, y) => {
+    const tolerance = 10;
+    for (let s = shapes.length - 1; s >= 0; s--) {
+      const shape = shapes[s];
+      for (let w of shape) {
+        const { start, end } = w;
+        const dist = Math.abs((end.y - start.y) * x - (end.x - start.x) * y + end.x * start.y - end.y * start.x) /
+                     Math.sqrt(Math.pow(end.y - start.y, 2) + Math.pow(end.x - start.x, 2));
+        if (dist < tolerance) {
+          setSelectedShapeIndex(s);
+          return;
+        }
+      }
+    }
+    setSelectedShapeIndex(null);
+  };
+  
 
 
   
@@ -302,6 +357,10 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedWalls = localStorage.getItem('floorplan-walls');
+      const storedShapes = localStorage.getItem('floorplan-shapes');
+      if (storedShapes) {
+        setShapes(JSON.parse(storedShapes));
+      }
       if (storedWalls) {
         const parsed = JSON.parse(storedWalls);
         setWalls(parsed);
@@ -351,11 +410,7 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
     if (startPoint) {
       const dx = Math.abs(x - startPoint.x);
       const dy = Math.abs(y - startPoint.y);
-      if (dx > dy) {
-        setCurrentPoint({ x, y: startPoint.y });
-      } else {
-        setCurrentPoint({ x: startPoint.x, y });
-      }
+      setCurrentPoint({ x, y });
     }
     e.preventDefault();
   };
@@ -405,12 +460,16 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
         <button onClick={() => {
           localStorage.removeItem('floorplan-walls');
           localStorage.removeItem('floorplan-labels');
+          localStorage.removeItem('floorplan-shapes'); // ← Add this
           setWalls([]);
           setRoomLabels([]);
+          setShapes([]); // ← Add this
           setSelectedWallIndex(null);
           setSelectedLabelIndex(null);
           if (onWallsUpdate) onWallsUpdate([]);
         }}>Reset Plan</button>
+
+      <button onClick={() => setTool('select-shape')}>Select Shape</button>
 
 
       </div>
@@ -439,6 +498,15 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
           } else {
             handleMouseDown(e);
           }
+          if (tool === 'select-shape') {
+            const rect = canvasRef.current.getBoundingClientRect();
+            const x = snap(e.clientX - rect.left);
+            const y = snap(e.clientY - rect.top);
+            handleShapeClick(x, y);
+            panStartRef.current = { x, y };
+            return;
+          }
+          
         }}
         
         onMouseMove={(e) => {
@@ -450,11 +518,41 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
           } else {
             handleMouseMove(e);
           }
+          if (tool === 'select-shape' && selectedShapeIndex !== null && panStartRef.current) {
+            const rect = canvasRef.current.getBoundingClientRect();
+            const x = snap(e.clientX - rect.left);
+            const y = snap(e.clientY - rect.top);
+            const dx = x - panStartRef.current.x;
+            const dy = y - panStartRef.current.y;
+            const updatedShapes = [...shapes];
+            const shape = updatedShapes[selectedShapeIndex].map(w => ({
+              start: { x: w.start.x + dx, y: w.start.y + dy },
+              end: { x: w.end.x + dx, y: w.end.y + dy },
+              type: w.type
+            }));
+            updatedShapes[selectedShapeIndex] = shape;
+            setShapes(updatedShapes);
+            const preservedWalls = walls.filter(w => !shapes.flat().some(sw => sw.start.x === w.start.x && sw.start.y === w.start.y && sw.end.x === w.end.x && sw.end.y === w.end.y));
+            setWalls([...preservedWalls, ...updatedShapes.flat()]);            
+            panStartRef.current = { x, y };
+            return;
+          }
+          
         }}
         
         onMouseUp={(e) => {
           setIsPanning(false);
           handleMouseUp(e);
+          if (tool === 'select-shape' && selectedShapeIndex !== null) {
+            // Persist shape drag on mouse up
+            const preservedWalls = walls.filter(w => !shapes.flat().some(sw => sw.start.x === w.start.x && sw.start.y === w.start.y && sw.end.x === w.end.x && sw.end.y === w.end.y));
+            const updated = [...preservedWalls, ...shapes.flat()];
+            setWalls(updated);            
+            localStorage.setItem('floorplan-shapes', JSON.stringify(shapes));
+            localStorage.setItem('floorplan-walls', JSON.stringify(updated));
+            if (onWallsUpdate) onWallsUpdate(updated);
+            setSelectedShapeIndex(null);
+          }
         }}
         
         onWheel={(e) => {
