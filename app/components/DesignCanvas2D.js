@@ -85,7 +85,7 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
       } else {
         ctx.lineWidth = 4;
       }
-  
+
       // Draw the line
       ctx.beginPath();
       ctx.moveTo(start.x, start.y);
@@ -408,14 +408,31 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
           setCurrentPoint(null);
           setSelectedWallIndex(null);
         
-          if (tool === 'label') {
-            const name = prompt('Enter room name:');
-            if (name) {
-              const newLabels = [...roomLabels, { x, y, name }];
-              setRoomLabels(newLabels);
-              localStorage.setItem('floorplan-labels', JSON.stringify(newLabels));
+        if (tool === 'label') {
+          const name = prompt('Enter room name:');
+          if (name) {
+            const newLabels = [...roomLabels, { x, y, name }];
+            setRoomLabels(newLabels);
+            localStorage.setItem('floorplan-labels', JSON.stringify(newLabels));
+          }
+        } else if (tool === 'select-label') {
+          const tolerance = 12;
+          let found = false;
+          for (let i = 0; i < roomLabels.length; i++) {
+            const label = roomLabels[i];
+            const dist = Math.sqrt((x - label.x) ** 2 + (y - label.y) ** 2);
+            if (dist < tolerance) {
+              setSelectedLabelIndex(i);
+              found = true;
+              break;
             }
           }
+          if (!found) setSelectedLabelIndex(null);
+        } else {
+          // default: try to select a wall
+          handleWallClick(x, y);
+        }
+
         
           if (tool === 'select-label') {
             const tolerance = 12;
