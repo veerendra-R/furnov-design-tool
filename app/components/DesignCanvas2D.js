@@ -15,10 +15,19 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   const [currentPoint, setCurrentPoint] = useState(null);
   const [tool, setTool] = useState('wall'); // default to wall tool
   const [selectedWallIndex, setSelectedWallIndex] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef(null);
+
+  
   const canvasRef = useRef(null);
 
-  const snap = (val) => Math.round(val / gridSize) * gridSize;
-
+  const snap = (val, isX = true) => {
+    const pan = isX ? offset.x : offset.y;
+    return Math.round((val / zoom - pan) / gridSize) * gridSize;
+  };
+  
   const draw = () => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -28,6 +37,9 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
     roomLabels.forEach(({ x, y, name }, i) => {
       ctx.fillStyle = i === selectedLabelIndex ? '#d62828' : '#000';
       ctx.font = 'bold 14px sans-serif';
+      ctx.save();
+      ctx.scale(zoom, zoom);
+      ctx.translate(offset.x, offset.y);
       ctx.beginPath();
       ctx.arc(x, y, 4, 0, 2 * Math.PI);
       ctx.fill(); // point marker
@@ -116,6 +128,8 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
       ctx.font = '12px sans-serif';
       ctx.fillText(label, midX + 5, midY - 5);
     }
+    ctx.restore();
+  
   };
   
 
@@ -247,6 +261,21 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
     }
   }, []);
   
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+  
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      draw();
+    };
+  
+    resizeCanvas(); // set on mount
+  
+    window.addEventListener('resize', resizeCanvas);
+    return () => window.removeEventListener('resize', resizeCanvas);
+  }, [draw]);
   
 
   return (
@@ -276,9 +305,38 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
         ref={canvasRef}
         style={{ cursor: tool === 'select-label' ? 'pointer' : drawing ? 'crosshair' : 'default' }}
         className={styles.canvas}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onMouseDown={(e) => {
+          if (e.button === 1 || (e.button === 0 && e.altKey)) {
+            // middle-click or alt+left-click
+            setIsPanning(true);
+            panStartRef.current = { x: e.clientX, y: e.clientY };
+          } else {
+            handleMouseDown(e);
+          }
+        }}
+        
+        onMouseMove={(e) => {
+          if (isPanning && panStartRef.current) {
+            const dx = (e.clientX - panStartRef.current.x) / zoom;
+            const dy = (e.clientY - panStartRef.current.y) / zoom;
+            setOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+            panStartRef.current = { x: e.clientX, y: e.clientY };
+          } else {
+            handleMouseMove(e);
+          }
+        }}
+        
+        onMouseUp={(e) => {
+          setIsPanning(false);
+          handleMouseUp(e);
+        }}
+        
+        onWheel={(e) => {
+          e.preventDefault();
+          const factor = e.deltaY < 0 ? 1.1 : 0.9;
+          setZoom((prev) => Math.max(0.5, Math.min(4, prev * factor)));
+        }}
+        
         onClick={(e) => {
           const rect = canvasRef.current.getBoundingClientRect();
           const x = snap(e.clientX - rect.left);
