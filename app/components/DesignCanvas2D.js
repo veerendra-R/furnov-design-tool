@@ -9,25 +9,76 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
   const [walls, setWalls] = useState(initialWalls);
   const [roomLabels, setRoomLabels] = useState([]);
   const [selectedLabelIndex, setSelectedLabelIndex] = useState(null);
-  
+
   const [drawing, setDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState(null);
   const [currentPoint, setCurrentPoint] = useState(null);
-  const [tool, setTool] = useState('wall'); // default to wall tool
+  const [tool, setTool] = useState('wall');
   const [selectedWallIndex, setSelectedWallIndex] = useState(null);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
-  const panStartRef = useRef(null);
+  const [showRoomModal, setShowRoomModal] = useState(false);
+
 
   
+  const panStartRef = useRef(null);
   const canvasRef = useRef(null);
 
   const snap = (val, isX = true) => {
     const pan = isX ? offset.x : offset.y;
     return Math.round((val / zoom - pan) / gridSize) * gridSize;
   };
+  const getCanvasCenter = () => {
+    const canvas = canvasRef.current;
+    const centerX = (canvas.width / 2) / zoom - offset.x;
+    const centerY = (canvas.height / 2) / zoom - offset.y;
+    return { x: snap(centerX), y: snap(centerY, false) };
+  };
   
+  const addPredefinedRoom = (shape) => {
+    const { x, y } = getCanvasCenter();
+    let newWalls = [];
+
+    if (shape === 'square') {
+      newWalls = [
+        { start: { x, y }, end: { x: x + 100, y } },
+        { start: { x: x + 100, y }, end: { x: x + 100, y: y + 100 } },
+        { start: { x: x + 100, y: y + 100 }, end: { x, y: y + 100 } },
+        { start: { x, y: y + 100 }, end: { x, y } },
+      ];
+    } else if (shape === 'rectangle') {
+      newWalls = [
+        { start: { x, y }, end: { x: x + 150, y } },
+        { start: { x: x + 150, y }, end: { x: x + 150, y: y + 100 } },
+        { start: { x: x + 150, y: y + 100 }, end: { x, y: y + 100 } },
+        { start: { x, y: y + 100 }, end: { x, y } },
+      ];
+    } else if (shape === 'lshape') {
+      newWalls = [
+        { start: { x, y }, end: { x: x + 100, y } },
+        { start: { x: x + 100, y }, end: { x: x + 100, y: y + 50 } },
+        { start: { x: x + 100, y: y + 50 }, end: { x: x + 150, y: y + 50 } },
+        { start: { x: x + 150, y: y + 50 }, end: { x: x + 150, y: y + 150 } },
+        { start: { x: x + 150, y: y + 150 }, end: { x, y: y + 150 } },
+        { start: { x, y: y + 150 }, end: { x, y } },
+      ];
+    }
+
+    const updated = [...walls, ...newWalls];
+    setWalls(updated);
+    localStorage.setItem('floorplan-walls', JSON.stringify(updated));
+    if (onWallsUpdate) onWallsUpdate(updated);
+    setShowRoomModal(false);
+  };
+
+  const renderShapeButton = (src, label, shape) => (
+    <div className={styles.shapeButton} onClick={() => addPredefinedRoom(shape)}>
+      <img src={src} alt={label} />
+      <span>{label}</span>
+    </div>
+  );
+
   const draw = () => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -350,6 +401,7 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
         <button onClick={handleClear}>Clear</button>
         <button onClick={() => setTool('label')}>Label</button>
         <button onClick={() => setTool('select-label')}>Select Label</button>
+        <button onClick={() => setShowRoomModal(true)}>➕ Add Room</button>
         <button onClick={() => {
           localStorage.removeItem('floorplan-walls');
           localStorage.removeItem('floorplan-labels');
@@ -362,6 +414,19 @@ export default function DesignCanvas2D({ onWallsUpdate,initialWalls = [] }) {
 
 
       </div>
+      {showRoomModal && (
+        <div className={styles.modal}>
+          <div className={styles.modalContent}>
+            <h3>Select Room Shape</h3>
+            <div className={styles.shapesGrid}>
+              {renderShapeButton('/shapes/square.png', 'Square', 'square')}
+              {renderShapeButton('/shapes/rectangle.png', 'Rectangle', 'rectangle')}
+              {renderShapeButton('/shapes/lshape.png', 'L-Shape', 'lshape')}
+            </div>
+            <button onClick={() => setShowRoomModal(false)} className={styles.cancelButton}>Cancel</button>
+          </div>
+        </div>
+      )}
       <canvas
         ref={canvasRef}
         style={{ cursor: tool === 'select-label' ? 'pointer' : drawing ? 'crosshair' : 'default' }}
